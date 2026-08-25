@@ -1,50 +1,52 @@
-# Azariah Signal Website
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="theme-color" content="#000000" />
+  <meta name="description" content="A transmission has been detected." />
+  <title>UNIDENTIFIED SIGNAL</title>
+  <link rel="stylesheet" href="styles.css?v=13" />
+</head>
+<body>
+  <canvas id="staticCanvas" aria-hidden="true"></canvas>
+  <div class="snow" aria-hidden="true"></div>
+  <div class="scanlines" aria-hidden="true"></div>
+  <div class="vignette" aria-hidden="true"></div>
+  <div class="tear tear-one" aria-hidden="true"></div>
+  <div class="tear tear-two" aria-hidden="true"></div>
 
-A deliberately minimal, mysterious one-page experience for:
+  <main class="receiver" id="receiver">
+    <div class="signal-copy" aria-live="polite">
+      <p class="prelude" id="prelude">UNIDENTIFIED TRANSMISSION DETECTED</p>
+      <p class="message" id="message">SOURCE UNKNOWN</p>
+      <button id="receiveButton" type="button" aria-label="Begin receiving transmission">
+        <span id="buttonText">RECEIVE SIGNAL</span>
+      </button>
+      <div class="meter" aria-hidden="true">
+        <span id="meterFill"></span>
+      </div>
+      <p class="frequency" id="frequency">0000.0 kHz</p>
+      <p class="scan-status" id="scanStatus">SCANNING AVAILABLE FREQUENCIES</p>
+    </div>
 
-- azariahband.com
-- azariah.band
+    <div class="coordinates" aria-hidden="true">
+      <span>35.2271° N</span>
+      <span>80.8431° W</span>
+      <span id="sequence">// 00:00:00 //</span>
+    </div>
+  </main>
 
-The page looks and sounds like an intercepted AM/shortwave transmission. It uses the Azariah song **“Chances”** beneath browser-generated radio static. A pre-filtered AM-radio copy plays directly in the browser for reliable local preview.
+  <p class="noscript">JavaScript is required to receive this transmission.</p>
 
-## Preview locally
+  <audio id="song" preload="auto" loop>
+    <source src="assets/chances-radio.mp3?v=13" type="audio/mpeg" />
+  </audio>
 
-Audio features work best through a local web server:
+  <audio id="germanSignal" preload="auto" aria-hidden="true">
+    <source src="assets/german-transmission.mp3?v=13" type="audio/mpeg" />
+  </audio>
 
-```bash
-cd azariah-band-site
-python3 -m http.server 8080
-```
-
-Then visit `http://localhost:8080` and click **RECEIVE SIGNAL**.
-
-## Audio behavior
-
-Modern browsers block sound until the visitor interacts with the page. After the first click:
-
-- AM-style static begins immediately.
-- Quiet intervals are shorter, but still unstable and unpredictable.
-- Very quiet traces and occasional short fragments of “Chances” emerge unpredictably.
-- Fragments can collapse suddenly, stutter through brief dropouts, or drift in playback speed.
-- Static rises whenever the carrier disappears.
-- Faint German shortwave fragments bleed through during some music-free intervals.
-- The maximum song volume is intentionally low so it feels buried beneath the interference.
-
-## Replace the song later
-
-Put another MP3 in `assets/` and update this line in `index.html`:
-
-```html
-<source src="assets/chances-radio.mp3" type="audio/mpeg" />
-```
-
-## Deployment
-
-Upload the entire folder to Netlify, Vercel, Cloudflare Pages, GitHub Pages, or a normal web host. Use `azariahband.com` as the primary domain and redirect `azariah.band` to it, or connect both domains to the same deployment.
-
-
-The experience now rotates among three distinct audio states: the Azariah song, pure static, and a boosted German transmission bleeding through from an adjacent frequency.
-
-
-## Concept reference
-The current `assets/german-transmission.mp3` is a temporary stand-in for the final German shortwave recording. For launch, replace that file with a cleared or newly recorded native German voice processed to resemble an authentic shortwave/AM intercept. Keep the same filename and the site logic will continue to work without code changes. The intended sequence is: static → quick music breakthrough → abrupt loss → one German shortwave intercept already in progress → static → music returns unpredictably.
+  <script src="script.js?v=13"></script>
+</body>
+</html>

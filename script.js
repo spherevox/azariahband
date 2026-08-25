@@ -42,6 +42,7 @@ let signalGeneration = 0;
 let germanHasPlayed = false;
 let germanPlayCount = 0;
 let transitionsSinceStart = 0;
+let consecutiveMusicStates = 0;
 let transitionsSinceGerman = 0;
 
 const germanPhraseStarts = [0, 3.915, 8.15, 11.672, 15.424];
@@ -226,64 +227,68 @@ function clearGermanTimers() {
   cancelAnimationFrame(germanFadeFrame);
 }
 
-function startGermanTransmission(generation, stateDurationMs) {
+function stopGermanTransmission() {
   clearGermanTimers();
-  if (!live || generation !== signalGeneration || currentSignalState !== 'german') return;
+  germanSignal.pause();
+  germanSignal.volume = 0;
+  germanSignal.playbackRate = 1;
+}
+
+async function startGermanTransmission(generation, stateDurationMs) {
+  clearGermanTimers();
+  if (!live || germanHasPlayed || generation !== signalGeneration || currentSignalState !== 'german') return;
+
+  germanHasPlayed = true;
+  germanPlayCount = 1;
 
   const phraseStart = germanPhraseStarts[Math.floor(Math.random() * germanPhraseStarts.length)];
-  germanSignal.currentTime = phraseStart + randomBetween(0.01, 0.12);
-  germanSignal.playbackRate = randomBetween(0.94, 1.025);
-  fadeGermanTo(randomBetween(0.38, 0.58), randomBetween(0.24, 0.66));
+  germanSignal.pause();
+  germanSignal.currentTime = phraseStart + randomBetween(0.01, 0.10);
+  germanSignal.playbackRate = randomBetween(0.95, 1.02);
+  germanSignal.volume = 0;
 
-  const fadeStart = Math.max(1500, stateDurationMs - randomBetween(900, 1650));
+  try {
+    await germanSignal.play();
+  } catch (error) {
+    console.warn('German transmission could not start.', error);
+    return;
+  }
+
+  fadeGermanTo(randomBetween(0.42, 0.60), randomBetween(0.18, 0.42));
+
+  const phraseLength = Math.min(stateDurationMs - 350, randomBetween(4200, 5600));
   germanFadeTimer = setTimeout(() => {
     if (!live || generation !== signalGeneration || currentSignalState !== 'german') return;
-    fadeGermanTo(0, randomBetween(0.55, 1.15));
-  }, fadeStart);
+    fadeGermanTo(0, 0.38);
+    germanTimer = setTimeout(stopGermanTransmission, 430);
+  }, Math.max(1200, phraseLength));
 }
 
 function scheduleButtonPulse() {
   clearTimeout(buttonPulseTimer);
 
   if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
-    buttonText.style.opacity = live ? '0.7' : '0.9';
+    buttonText.style.opacity = '0.88';
     return;
   }
 
-  if (!live) {
-    buttonBlinkVisible = !buttonBlinkVisible;
-    buttonText.style.opacity = buttonBlinkVisible ? '0.92' : '0.2';
-    buttonText.style.textShadow = buttonBlinkVisible
-      ? [
-          '0 0 4px rgba(180, 22, 22, 0.68)',
-          '0 0 11px rgba(120, 8, 8, 0.34)',
-          '0 0 20px rgba(80, 0, 0, 0.14)'
-        ].join(', ')
-      : [
-          '0 0 1px rgba(140, 18, 18, 0.26)',
-          '0 0 5px rgba(90, 0, 0, 0.08)'
-        ].join(', ');
+  buttonBlinkVisible = !buttonBlinkVisible;
+  buttonText.style.opacity = buttonBlinkVisible ? '0.92' : '0.20';
+  buttonText.style.textShadow = buttonBlinkVisible
+    ? [
+        '0 0 4px rgba(180, 22, 22, 0.68)',
+        '0 0 11px rgba(120, 8, 8, 0.34)',
+        '0 0 20px rgba(80, 0, 0, 0.14)'
+      ].join(', ')
+    : [
+        '0 0 1px rgba(140, 18, 18, 0.26)',
+        '0 0 5px rgba(90, 0, 0, 0.08)'
+      ].join(', ');
 
-    buttonPulseTimer = setTimeout(scheduleButtonPulse, buttonBlinkVisible ? randomBetween(420, 620) : randomBetween(280, 460));
-    return;
-  }
-
-  const roll = Math.random();
-  const opacity = roll < 0.14
-    ? randomBetween(0.36, 0.54)
-    : roll < 0.48
-      ? randomBetween(0.56, 0.74)
-      : randomBetween(0.76, 0.9);
-  const glow = randomBetween(0.16, 0.42);
-
-  buttonText.style.opacity = opacity.toFixed(2);
-  buttonText.style.textShadow = [
-    `0 0 3px rgba(180, 22, 22, ${Math.min(0.6, glow + 0.12).toFixed(2)})`,
-    `0 0 9px rgba(120, 8, 8, ${glow.toFixed(2)})`,
-    `0 0 18px rgba(80, 0, 0, ${(glow * 0.38).toFixed(2)})`
-  ].join(', ');
-
-  buttonPulseTimer = setTimeout(scheduleButtonPulse, randomBetween(320, 1400));
+  const nextDelay = buttonBlinkVisible
+    ? randomBetween(420, 620)
+    : randomBetween(280, 460);
+  buttonPulseTimer = setTimeout(scheduleButtonPulse, nextDelay);
 }
 
 function clearWordmarkTimers() {
@@ -329,58 +334,89 @@ function clearDropoutTimers() {
   clearTimeout(dropoutRestoreTimer);
 }
 
+async function ensureSongPlaying() {
+  if (!song.paused) return true;
+  try {
+    await song.play();
+    return true;
+  } catch (error) {
+    console.warn('Song could not resume.', error);
+    return false;
+  }
+}
+
+function pauseSongNow() {
+  cancelAnimationFrame(songFadeFrame);
+  song.volume = 0;
+  song.pause();
+}
+
+function fadeAndPauseSong(durationSeconds = 0.18) {
+  fadeSongTo(0, durationSeconds);
+  window.setTimeout(() => {
+    if (currentSignalState === 'lost' || currentSignalState === 'german' || !live) {
+      pauseSongNow();
+    }
+  }, Math.max(80, durationSeconds * 1000 + 40));
+}
+
 function scheduleAudioDropout(generation) {
   clearDropoutTimers();
-  if (!live || currentSignalState === 'lost') return;
+  if (!live || (currentSignalState !== 'fragment' && currentSignalState !== 'trace')) return;
 
   dropoutTimer = setTimeout(() => {
-    if (!live || generation !== signalGeneration || currentSignalState === 'lost') return;
+    if (!live || generation !== signalGeneration || (currentSignalState !== 'fragment' && currentSignalState !== 'trace')) return;
 
-    const collapseTime = randomBetween(0.04, 0.38);
-    const silenceLength = randomBetween(0.22, 1.85);
-    fadeSongTo(randomBetween(0, 0.004), collapseTime);
+    const collapseTime = randomBetween(0.04, 0.22);
+    const silenceLength = randomBetween(1.0, 3.4);
+    fadeSongTo(0, collapseTime);
 
-    dropoutRestoreTimer = setTimeout(() => {
-      if (!live || generation !== signalGeneration || currentSignalState === 'lost') return;
-      fadeSongTo(currentSongTarget * randomBetween(0.55, 1), randomBetween(0.22, 1.8));
+    window.setTimeout(() => {
+      if (!live || generation !== signalGeneration) return;
+      song.pause();
+      song.volume = 0;
+    }, collapseTime * 1000 + 30);
+
+    dropoutRestoreTimer = setTimeout(async () => {
+      if (!live || generation !== signalGeneration || (currentSignalState !== 'fragment' && currentSignalState !== 'trace')) return;
+      const resumed = await ensureSongPlaying();
+      if (!resumed) return;
+      fadeSongTo(currentSongTarget * randomBetween(0.62, 1), randomBetween(0.18, 1.15));
       scheduleAudioDropout(generation);
     }, silenceLength * 1000);
-  }, randomBetween(750, 3900));
+  }, randomBetween(850, 2600));
 }
 
 function chooseNextState(state) {
-  // Make the foreign station recur several times early in the experience,
-  // then continue returning unpredictably afterward.
-  if (germanPlayCount === 0 && transitionsSinceStart >= 2) return 'german';
-  if (germanPlayCount === 1 && transitionsSinceGerman >= 3) return 'german';
-  if (germanPlayCount === 2 && transitionsSinceGerman >= 4) return 'german';
+  // Let one foreign transmission bleed through once, then never return to it.
+  if (!germanHasPlayed && transitionsSinceStart >= 2) return 'german';
+
+  // Never let the song ride continuously for too long. After two consecutive
+  // music-bearing states, force a true static-only break.
+  if ((state === 'fragment' || state === 'trace') && consecutiveMusicStates >= 2) {
+    return 'lost';
+  }
 
   const roll = Math.random();
 
   if (state === 'lost') {
-    if (roll < 0.14) return 'lost';
-    if (roll < 0.38) return 'german';
-    if (roll < 0.62) return 'trace';
+    if (roll < 0.24) return 'lost';
+    if (roll < 0.52) return 'trace';
     return 'fragment';
   }
 
   if (state === 'german') {
-    if (roll < 0.08) return 'german';
-    if (roll < 0.22) return 'lost';
-    if (roll < 0.50) return 'trace';
-    return 'fragment';
+    return roll < 0.42 ? 'lost' : (roll < 0.70 ? 'trace' : 'fragment');
   }
 
   if (state === 'trace') {
-    if (roll < 0.12) return 'lost';
-    if (roll < 0.32) return 'german';
-    if (roll < 0.50) return 'trace';
+    if (roll < 0.24) return 'lost';
+    if (roll < 0.48) return 'trace';
     return 'fragment';
   }
 
-  if (roll < 0.12) return 'lost';
-  if (roll < 0.30) return 'german';
-  if (roll < 0.47) return 'trace';
+  if (roll < 0.30) return 'lost';
+  if (roll < 0.50) return 'trace';
   return 'fragment';
 }
 
@@ -389,11 +425,10 @@ function setSignalState(state) {
 
   currentSignalState = state;
   transitionsSinceStart += 1;
-  transitionsSinceGerman += 1;
-  if (state === 'german') {
-    germanHasPlayed = true;
-    germanPlayCount += 1;
-    transitionsSinceGerman = 0;
+  if (state === 'fragment' || state === 'trace') {
+    consecutiveMusicStates += 1;
+  } else {
+    consecutiveMusicStates = 0;
   }
   signalGeneration += 1;
   const generation = signalGeneration;
@@ -401,7 +436,7 @@ function setSignalState(state) {
   clearGermanTimers();
 
   if (state !== 'german') {
-    fadeGermanTo(0, randomBetween(0.10, 0.34));
+    stopGermanTransmission();
   }
 
   document.body.classList.toggle('signal-found', state === 'fragment');
@@ -434,7 +469,7 @@ function setSignalState(state) {
     currentSongTarget = 0;
     noiseTarget = randomBetween(0.12, 0.19);
     transition = randomBetween(0.08, 0.34);
-    nextDelay = randomBetween(3600, 6200);
+    nextDelay = randomBetween(5000, 6800);
     prelude.textContent = 'FOREIGN CARRIER DETECTED';
     message.textContent = Math.random() > 0.5 ? 'ADJACENT BAND INTERFERENCE' : 'VOICE SOURCE UNKNOWN';
     song.playbackRate = randomBetween(0.985, 1.008);
@@ -448,7 +483,15 @@ function setSignalState(state) {
     song.playbackRate = randomBetween(0.982, 1.008);
   }
 
-  fadeSongTo(currentSongTarget, transition);
+  if (state === 'fragment' || state === 'trace') {
+    ensureSongPlaying().then((started) => {
+      if (started && live && generation === signalGeneration) {
+        fadeSongTo(currentSongTarget, transition);
+      }
+    });
+  } else {
+    fadeAndPauseSong(transition);
+  }
 
   noiseGain.gain.cancelScheduledValues(now);
   noiseGain.gain.setValueAtTime(Math.max(noiseGain.gain.value, 0.001), now);
@@ -494,23 +537,28 @@ async function startTransmission() {
   germanHasPlayed = false;
   germanPlayCount = 0;
   transitionsSinceStart = 0;
+  consecutiveMusicStates = 0;
   transitionsSinceGerman = 0;
   await buildNoiseGraph();
   await audioContext.resume();
 
   song.muted = false;
-  song.volume = 0.002;
+  song.volume = 0;
   song.playbackRate = 1;
 
-  // Keep the music on the normal media-element path. This avoids the common
-  // local-file browser restriction that can silence audio routed into Web Audio.
+  // Unlock later playback during this user gesture, then keep the source paused
+  // until its signal state is active.
   await song.play();
+  song.pause();
+  song.volume = 0;
 
   germanSignal.muted = false;
   germanSignal.volume = 0;
-  germanSignal.currentTime = germanPhraseStarts[Math.floor(Math.random() * germanPhraseStarts.length)];
+  germanSignal.currentTime = 0;
   germanSignal.playbackRate = 1;
   await germanSignal.play();
+  germanSignal.pause();
+  germanSignal.currentTime = 0;
 
   live = true;
   document.body.classList.add('is-live', 'signal-lost');
@@ -529,7 +577,7 @@ async function startTransmission() {
   // Establish the noise first, then let the song break through very quickly.
   setSignalState('lost');
   clearTimeout(signalTimer);
-  signalTimer = setTimeout(() => setSignalState(Math.random() > 0.35 ? 'fragment' : 'trace'), randomBetween(550, 1100));
+  signalTimer = setTimeout(() => setSignalState('fragment'), randomBetween(500, 950));
 }
 
 function stopTransmission() {
@@ -545,10 +593,7 @@ function stopTransmission() {
   song.pause();
   song.volume = 0;
   song.playbackRate = 1;
-  clearGermanTimers();
-  germanSignal.pause();
-  germanSignal.volume = 0;
-  germanSignal.playbackRate = 1;
+  stopGermanTransmission();
 
   if (audioContext && noiseGain) {
     const now = audioContext.currentTime;
